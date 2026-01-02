@@ -20,4 +20,4 @@ services:
         sync: false  # No sincronizar automáticamente, se configura manual
       
       - key: PYTHON_VERSION
-        value: 3.11.0
+        value: 3.10.0
