@@ -1,0 +1,23 @@
+services:
+  # Define que es un servicio web
+  - type: web
+    
+    # Nombre de tu aplicación en Render
+    name: rag-multidocumento
+    
+    # Lenguaje/runtime
+    env: python
+    
+    # Comando para instalar dependencias
+    buildCommand: pip install -r requirements.txt
+    
+    # Comando para iniciar la app
+    startCommand: gunicorn app:app
+    
+    # Variables de entorno (debes configurar el valor en el dashboard)
+    envVars:
+      - key: OPENAI_API_KEY
+        sync: false  # No sincronizar automáticamente, se configura manual
+      
+      - key: PYTHON_VERSION
+        value: 3.11.0

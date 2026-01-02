@@ -1,0 +1,548 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>RAG Multi-Documento - Chatbot Inteligente</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 20px; }
+        .container { background: rgba(255, 255, 255, 0.98); backdrop-filter: blur(20px); border-radius: 24px; box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3); width: 100%; max-width: 1400px; height: 85vh; display: flex; overflow: hidden; }
+        .sidebar { width: 350px; background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%); color: white; padding: 30px 25px; display: flex; flex-direction: column; }
+        .sidebar h2 { font-size: 28px; margin-bottom: 10px; color: #fff; display: flex; align-items: center; gap: 10px; }
+        .sidebar .subtitle { font-size: 13px; color: rgba(255, 255, 255, 0.7); margin-bottom: 25px; }
+        .upload-section { background: rgba(255, 255, 255, 0.1); border-radius: 16px; padding: 5px; margin-bottom: 15px; }
+        .upload-section h3 { font-size: 15px; margin-bottom: 15px; color: #e0e7ff; font-weight: 600; }
+        .file-input-wrapper { position: relative; margin-bottom: 15px; }
+        .file-input { display: none; }
+        .file-input-label { display: flex; align-items: center; justify-content: center; gap: 8px; padding: 14px 18px; background: rgba(59, 130, 246, 0.9); color: white; border-radius: 12px; cursor: pointer; transition: all 0.3s ease; font-weight: 500; font-size: 14px; }
+        .file-input-label:hover { background: rgba(37, 99, 235, 1); transform: translateY(-2px); }
+        .upload-btn { width: 100%; padding: 14px; background: linear-gradient(135deg, #10b981 0%, #059669 100%); color: white; border: none; border-radius: 12px; cursor: pointer; font-size: 15px; font-weight: 600; transition: all 0.3s ease; display: flex; align-items: center; justify-content: center; gap: 8px; }
+        .upload-btn:hover:not(:disabled) { transform: translateY(-2px); box-shadow: 0 8px 20px rgba(16, 185, 129, 0.4); }
+        .upload-btn:disabled { background: rgba(100, 116, 139, 0.5); cursor: not-allowed; transform: none; }
+        .documents-list { flex-grow: 1; margin-bottom: 20px; overflow-y: auto; }
+        .documents-list h3 { font-size: 15px; margin-bottom: 12px; color: #e0e7ff; font-weight: 600; display: flex; justify-content: space-between; align-items: center; }
+        .doc-controls { display: flex; gap: 8px; margin-bottom: 15px; }
+        .btn-small { padding: 8px 14px; background: rgba(255, 255, 255, 0.15); color: white; border: none; border-radius: 8px; cursor: pointer; font-size: 12px; font-weight: 500; transition: all 0.2s ease; }
+        .btn-small:hover { background: rgba(255, 255, 255, 0.25); }
+        .document-item { padding: 14px 16px; background: rgba(255, 255, 255, 0.08); border-radius: 12px; margin-bottom: 10px; cursor: pointer; transition: all 0.3s ease; border-left: 4px solid transparent; position: relative; }
+        .document-item:hover { background: rgba(255, 255, 255, 0.15); border-left-color: #60a5fa; }
+        .document-item.selected { background: rgba(96, 165, 250, 0.3); border-left-color: #60a5fa; }
+        .document-item .doc-name { font-weight: 600; font-size: 14px; margin-bottom: 4px; display: flex; align-items: center; gap: 8px; }
+        .document-item .doc-info { font-size: 12px; color: rgba(255, 255, 255, 0.7); display: flex; justify-content: space-between; align-items: center; margin-top: 6px; }
+        .document-item .doc-actions { display: flex; gap: 6px; position: absolute; top: 12px; right: 12px; }
+        .doc-action-btn { background: rgba(59, 130, 246, 0.8); border: none; color: white; width: 24px; height: 24px; border-radius: 6px; cursor: pointer; font-size: 12px; transition: all 0.2s ease; display: flex; align-items: center; justify-content: center; }
+        .doc-action-btn:hover { transform: scale(1.1); }
+        .doc-action-btn.delete { background: rgba(239, 68, 68, 0.8); }
+        .doc-action-btn.delete:hover { background: rgba(220, 38, 38, 1); }
+        .doc-action-btn.view { background: rgba(16, 185, 129, 0.8); }
+        .doc-action-btn.view:hover { background: rgba(5, 150, 105, 1); }
+        .doc-checkbox { width: 18px; height: 18px; cursor: pointer; margin-right: 10px; }
+        .search-mode { background: rgba(255, 255, 255, 0.1); border-radius: 12px; padding: 5px; margin-bottom: 20px; }
+        .search-mode h4 { font-size: 13px; color: #e0e7ff; margin-bottom: 10px; font-weight: 600; }
+        .radio-group { display: flex; flex-direction: column; gap: 8px; }
+        .radio-option { display: flex; align-items: center; gap: 8px; font-size: 13px; cursor: pointer; }
+        .radio-option input[type="radio"] { cursor: pointer; }
+        .selection-count { font-size: 12px; color: #a5b4fc; margin-top: 8px; font-weight: 500; }
+        .chat-area { flex-grow: 1; display: flex; flex-direction: column; background: white; }
+        .chat-header { padding: 25px 35px; background: linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%); border-bottom: 2px solid #e2e8f0; display: flex; justify-content: space-between; align-items: center; }
+        .chat-header h1 { font-size: 28px; color: #1e293b; margin-bottom: 5px; }
+        .chat-header p { color: #64748b; font-size: 14px; }
+        .status-badge { padding: 8px 16px; border-radius: 20px; font-size: 13px; font-weight: 600; display: flex; align-items: center; gap: 6px; }
+        .status-badge.connected { background: #d1fae5; color: #065f46; }
+        .status-badge.error { background: #fee2e2; color: #991b1b; }
+        .messages-container { flex-grow: 1; padding: 35px; overflow-y: auto; background: #f8fafc; }
+        .message { margin-bottom: 25px; display: flex; flex-direction: column; animation: fadeIn 0.3s ease; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+        .message.user { align-items: flex-end; }
+        .message-content { max-width: 75%; padding: 18px 22px; border-radius: 18px; font-size: 15px; line-height: 1.6; white-space: pre-wrap; }
+        .message.user .message-content { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; border-bottom-right-radius: 6px; }
+        .message.bot .message-content { background: white; color: #1e293b; border: 1px solid #e2e8f0; border-bottom-left-radius: 6px; box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08); }
+        .message.error .message-content { background: #fee2e2; color: #991b1b; border: 1px solid #fecaca; }
+        .sources-container { margin-top: 15px; padding: 15px; background: #f1f5f9; border-radius: 12px; border-left: 4px solid #3b82f6; }
+        .sources-title { font-size: 13px; font-weight: 600; color: #475569; margin-bottom: 10px; display: flex; align-items: center; gap: 6px; }
+        .source-item { background: white; padding: 10px 12px; border-radius: 8px; margin-bottom: 8px; font-size: 12px; border-left: 3px solid #60a5fa; }
+        .source-item strong { color: #1e40af; }
+        .source-preview { color: #64748b; margin-top: 5px; font-style: italic; }
+        .input-area { padding: 25px 35px; background: white; border-top: 2px solid #e2e8f0; display: flex; gap: 15px; }
+        .message-input { flex-grow: 1; padding: 16px 22px; border: 2px solid #e2e8f0; border-radius: 28px; font-size: 15px; outline: none; transition: all 0.3s ease; font-family: inherit; }
+        .message-input:focus { border-color: #667eea; box-shadow: 0 0 0 4px rgba(102, 126, 234, 0.1); }
+        .message-input:disabled { background: #f1f5f9; color: #94a3b8; }
+        .send-btn { padding: 16px 28px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; border: none; border-radius: 28px; cursor: pointer; font-weight: 600; font-size: 15px; transition: all 0.3s ease; min-width: 100px; display: flex; align-items: center; justify-content: center; gap: 8px; }
+        .send-btn:hover:not(:disabled) { transform: translateY(-2px); box-shadow: 0 8px 20px rgba(102, 126, 234, 0.4); }
+        .send-btn:disabled { background: #cbd5e1; cursor: not-allowed; transform: none; }
+        .loading { display: none; text-align: center; padding: 25px; color: #64748b; }
+        .loading.show { display: block; }
+        .spinner { display: inline-block; width: 24px; height: 24px; border: 3px solid #f3f4f6; border-top: 3px solid #667eea; border-radius: 50%; animation: spin 1s linear infinite; margin-right: 10px; }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+        .toast { position: fixed; top: 30px; right: 30px; padding: 16px 24px; border-radius: 12px; color: white; font-weight: 600; font-size: 14px; opacity: 0; transform: translateY(-20px); transition: all 0.3s ease; z-index: 1000; max-width: 350px; box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2); }
+        .toast.show { opacity: 1; transform: translateY(0); }
+        .toast.success { background: linear-gradient(135deg, #10b981 0%, #059669 100%); }
+        .toast.error { background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%); }
+        .toast.info { background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%); }
+        .toast.warning { background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%); }
+        
+        /* Modal para visualizar PDF */
+        .modal { display: none; position: fixed; z-index: 2000; left: 0; top: 0; width: 100%; height: 100%; background-color: rgba(0,0,0,0.8); }
+        .modal.show { display: flex; align-items: center; justify-content: center; }
+        .modal-content { background: white; width: 90%; height: 90%; border-radius: 16px; display: flex; flex-direction: column; box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5); }
+        .modal-header { padding: 20px 30px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; border-radius: 16px 16px 0 0; display: flex; justify-content: space-between; align-items: center; }
+        .modal-header h2 { font-size: 20px; margin: 0; }
+        .modal-close { background: rgba(255, 255, 255, 0.2); border: none; color: white; font-size: 28px; cursor: pointer; width: 40px; height: 40px; border-radius: 8px; display: flex; align-items: center; justify-content: center; transition: all 0.2s ease; }
+        .modal-close:hover { background: rgba(255, 255, 255, 0.3); transform: scale(1.1); }
+        .modal-body { flex-grow: 1; padding: 0; overflow: hidden; }
+        .pdf-viewer { width: 100%; height: 100%; border: none; }
+    </style>
+</head>
+<body>
+<div class="container">
+    <div class="sidebar">
+        <h2>📚 Documentos</h2>
+        <p class="subtitle">Sistema RAG Multi-Documento</p>
+
+        <div class="upload-section">
+            <h3>Subir Nuevo Documento</h3>
+            <div class="file-input-wrapper">
+                <input type="file" id="pdfFile" class="file-input" accept=".pdf">
+                <label for="pdfFile" class="file-input-label">🔎 Seleccionar PDF</label>
+            </div>
+            <button class="upload-btn" id="uploadBtn" disabled>🚀 Procesar y Entrenar</button>
+        </div>
+
+        <div class="search-mode">
+            <h4>Modo de Búsqueda</h4>
+            <div class="radio-group">
+                <label class="radio-option">
+                    <input type="radio" name="searchMode" value="all" checked>
+                    <span>🌐 Buscar en todos los documentos</span>
+                </label>
+                <label class="radio-option">
+                    <input type="radio" name="searchMode" value="selected">
+                    <span>🎯 Solo documentos seleccionados</span>
+                </label>
+            </div>
+            <div class="selection-count" id="selectionCount"></div>
+        </div>
+
+        <div class="documents-list">
+            <h3><span>Documentos Disponibles</span> <span id="docCount">0</span></h3>
+            <div class="doc-controls">
+                <button class="btn-small" id="selectAllBtn">☑️ Todos</button>
+                <button class="btn-small" id="deselectAllBtn">☐ Ninguno</button>
+                <button class="btn-small" id="refreshBtn">🔄 Actualizar</button>
+            </div>
+            <div id="documentsList"></div>
+        </div>
+    </div>
+
+    <div class="chat-area">
+        <div class="chat-header">
+            <div>
+                <h1>💬 Chat Inteligente</h1>
+                <p>Haz preguntas sobre múltiples documentos simultáneamente</p>
+            </div>
+            <div style="display: flex; gap: 10px; align-items: center;">
+                <button class="btn-small" id="clearMemoryBtn" style="padding: 10px 18px; font-size: 13px;">🧹 Limpiar Memoria</button>
+                <div class="status-badge" id="statusBadge">🔄 Conectando...</div>
+            </div>
+        </div>
+
+        <div class="messages-container" id="messagesContainer">
+            <div class="message bot">
+                <div class="message-content">
+                    ¡Bienvenido al sistema RAG Multi-Documento! 🎉
+                    <br>• 📄 Sube múltiples documentos PDF
+                    <br>• 🔍 Haz preguntas sobre uno o varios documentos
+                    <br>• 📊 Obtén respuestas con referencias a las fuentes
+                    <br>• 🎯 Filtra búsquedas por documentos específicos
+                    <br>• 👁️ Visualiza tus PDFs almacenados
+                    <br>• 🧠 Memoria conversacional: recuerdo el contexto de tus preguntas anteriores
+                </div>
+            </div>
+        </div>
+
+        <div class="loading" id="loadingIndicator">
+            <div class="spinner"></div>
+            Procesando tu solicitud...
+        </div>
+
+        <div class="input-area">
+            <input type="text" class="message-input" id="messageInput" placeholder="Sube al menos un documento para comenzar..." disabled>
+            <button class="send-btn" id="sendBtn" disabled>📤 Enviar</button>
+        </div>
+    </div>
+</div>
+
+<!-- Modal para visualizar PDF -->
+<div class="modal" id="pdfModal">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h2 id="pdfModalTitle">📄 Visualizar Documento</h2>
+            <button class="modal-close" id="closeModal">&times;</button>
+        </div>
+        <div class="modal-body">
+            <iframe class="pdf-viewer" id="pdfViewer"></iframe>
+        </div>
+    </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+const API_BASE = window.location.origin;
+let selectedDocIds = new Set();
+let allDocuments = [];
+
+const pdfFile = document.getElementById('pdfFile');
+const uploadBtn = document.getElementById('uploadBtn');
+const messageInput = document.getElementById('messageInput');
+const sendBtn = document.getElementById('sendBtn');
+const messagesContainer = document.getElementById('messagesContainer');
+const loadingIndicator = document.getElementById('loadingIndicator');
+const documentsList = document.getElementById('documentsList');
+const toast = document.getElementById('toast');
+const statusBadge = document.getElementById('statusBadge');
+const refreshBtn = document.getElementById('refreshBtn');
+const selectAllBtn = document.getElementById('selectAllBtn');
+const deselectAllBtn = document.getElementById('deselectAllBtn');
+const docCount = document.getElementById('docCount');
+const selectionCount = document.getElementById('selectionCount');
+const pdfModal = document.getElementById('pdfModal');
+const pdfViewer = document.getElementById('pdfViewer');
+const pdfModalTitle = document.getElementById('pdfModalTitle');
+const closeModal = document.getElementById('closeModal');
+const clearMemoryBtn = document.getElementById('clearMemoryBtn');
+
+function formatDate(isoString) {
+    const date = new Date(isoString);
+    return date.toLocaleDateString('es-ES', { 
+        year: 'numeric', 
+        month: 'long', 
+        day: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit'
+    });
+}
+
+pdfFile.addEventListener('change', () => { 
+    uploadBtn.disabled = pdfFile.files.length === 0; 
+});
+
+uploadBtn.addEventListener('click', async () => {
+    if(!pdfFile.files.length) return;
+    const file = pdfFile.files[0];
+    const formData = new FormData();
+    formData.append('file', file);
+    uploadBtn.disabled = true;
+    uploadBtn.textContent = '⏳ Procesando...';
+    
+    try {
+        const res = await fetch(`${API_BASE}/api/upload`, { method: 'POST', body: formData });
+        const data = await res.json();
+        if(data.success) { 
+            showToast('Documento procesado ✅', 'success'); 
+            pdfFile.value = ''; 
+            loadDocuments(); 
+        } else {
+            showToast('Error al procesar ❌', 'error');
+        }
+    } catch(e) { 
+        console.error(e); 
+        showToast('Error de red ❌', 'error'); 
+    }
+    
+    uploadBtn.disabled = false;
+    uploadBtn.textContent = '🚀 Procesar y Entrenar';
+});
+
+refreshBtn.addEventListener('click', loadDocuments);
+
+selectAllBtn.addEventListener('click', () => { 
+    selectedDocIds = new Set(allDocuments.map(d => d.id)); 
+    renderDocuments(); 
+});
+
+deselectAllBtn.addEventListener('click', () => { 
+    selectedDocIds.clear(); 
+    renderDocuments(); 
+});
+
+messageInput.addEventListener('keypress', (e) => { 
+    if(e.key === 'Enter' && !sendBtn.disabled) sendMessage(); 
+});
+
+sendBtn.addEventListener('click', sendMessage);
+
+closeModal.addEventListener('click', () => {
+    pdfModal.classList.remove('show');
+    pdfViewer.src = '';
+});
+
+pdfModal.addEventListener('click', (e) => {
+    if(e.target === pdfModal) {
+        pdfModal.classList.remove('show');
+        pdfViewer.src = '';
+    }
+});
+
+clearMemoryBtn.addEventListener('click', async () => {
+    if(!confirm('¿Deseas limpiar la memoria de la conversación? Perderás el contexto de las preguntas anteriores.')) {
+        return;
+    }
+    
+    try {
+        const res = await fetch(`${API_BASE}/api/clear-memory`, {
+            method: 'POST',
+            credentials: 'include'
+        });
+        
+        const data = await res.json();
+        
+        if(data.success) {
+            showToast('🧹 Memoria limpiada correctamente', 'success');
+            // Opcionalmente, limpiar el chat visual
+            messagesContainer.innerHTML = `
+                <div class="message bot">
+                    <div class="message-content">
+                        ¡Memoria reiniciada! 🎉 Puedes comenzar una nueva conversación.
+                    </div>
+                </div>
+            `;
+        } else {
+            showToast('Error al limpiar memoria ❌', 'error');
+        }
+    } catch(e) {
+        console.error(e);
+        showToast('Error de red ❌', 'error');
+    }
+});
+
+function showToast(message, type='info') { 
+    toast.textContent = message; 
+    toast.className = `toast ${type} show`; 
+    setTimeout(() => { toast.className = 'toast'; }, 4000); 
+}
+
+function viewPDF(docId, fileName) {
+    pdfModalTitle.textContent = `📄 ${fileName}`;
+    pdfViewer.src = `${API_BASE}/api/view-pdf/${docId}`;
+    pdfModal.classList.add('show');
+}
+
+async function loadDocuments() {
+    try {
+        const res = await fetch(`${API_BASE}/api/documents`);
+        const data = await res.json();
+        allDocuments = data.documents || [];
+        renderDocuments();
+    } catch(e) { 
+        console.error(e); 
+        showToast('Error cargando documentos ❌', 'error'); 
+    }
+}
+
+function renderDocuments() {
+    documentsList.innerHTML = '';
+    
+    allDocuments.forEach(doc => {
+        const div = document.createElement('div');
+        div.className = 'document-item' + (selectedDocIds.has(doc.id) ? ' selected' : '');
+        
+        const checkbox = document.createElement('input');
+        checkbox.type = 'checkbox';
+        checkbox.className = 'doc-checkbox';
+        checkbox.checked = selectedDocIds.has(doc.id);
+        checkbox.addEventListener('click', (e) => {
+            e.stopPropagation();
+            if(selectedDocIds.has(doc.id)) {
+                selectedDocIds.delete(doc.id);
+            } else {
+                selectedDocIds.add(doc.id);
+            }
+            renderDocuments();
+        });
+        
+        const docActions = document.createElement('div');
+        docActions.className = 'doc-actions';
+        
+        const viewBtn = document.createElement('button');
+        viewBtn.className = 'doc-action-btn view';
+        viewBtn.innerHTML = '👁️';
+        viewBtn.title = 'Ver documento';
+        viewBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            viewPDF(doc.id, doc.fileName);
+        });
+        
+        const deleteBtn = document.createElement('button');
+        deleteBtn.className = 'doc-action-btn delete';
+        deleteBtn.innerHTML = '🗑️';
+        deleteBtn.title = 'Eliminar documento';
+        deleteBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            deleteDocument(doc.id);
+        });
+        
+        docActions.appendChild(viewBtn);
+        docActions.appendChild(deleteBtn);
+        
+        const docName = document.createElement('div');
+        docName.className = 'doc-name';
+        docName.appendChild(checkbox);
+        docName.appendChild(document.createTextNode(doc.fileName));
+        
+        const docInfo = document.createElement('div');
+        docInfo.className = 'doc-info';
+        docInfo.innerHTML = `
+            <span>${doc.chunkCount} chunks</span>
+            <span style="font-size: 11px;">${formatDate(doc.uploadDate)}</span>
+        `;
+        
+        div.appendChild(docName);
+        div.appendChild(docInfo);
+        div.appendChild(docActions);
+        
+        div.addEventListener('click', () => { 
+            if(selectedDocIds.has(doc.id)) {
+                selectedDocIds.delete(doc.id);
+            } else {
+                selectedDocIds.add(doc.id);
+            }
+            renderDocuments(); 
+        });
+        
+        documentsList.appendChild(div);
+    });
+    
+    docCount.textContent = allDocuments.length;
+    
+    if(selectedDocIds.size > 0) {
+        selectionCount.textContent = `📌 ${selectedDocIds.size} seleccionado${selectedDocIds.size > 1 ? 's' : ''}`;
+    } else {
+        selectionCount.textContent = '';
+    }
+    
+    const anyDocs = allDocuments.length > 0;
+    messageInput.disabled = !anyDocs;
+    sendBtn.disabled = !anyDocs;
+    
+    if(anyDocs) {
+        messageInput.placeholder = 'Escribe tu pregunta aquí...';
+    } else {
+        messageInput.placeholder = 'Sube al menos un documento para comenzar...';
+    }
+}
+
+async function deleteDocument(docId) {
+    if(!confirm('¿Estás seguro de que deseas eliminar este documento? Esta acción no se puede deshacer.')) {
+        return;
+    }
+    
+    try {
+        const res = await fetch(`${API_BASE}/api/delete-document`, {
+            method: 'DELETE',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ docId })
+        });
+        
+        const data = await res.json();
+        
+        if(data.success) {
+            showToast('Documento eliminado ✅', 'success');
+            selectedDocIds.delete(docId);
+            loadDocuments();
+        } else {
+            showToast('Error al eliminar ❌', 'error');
+        }
+    } catch(e) {
+        console.error(e);
+        showToast('Error de red ❌', 'error');
+    }
+}
+
+async function sendMessage() {
+    const question = messageInput.value.trim();
+    if(!question) return;
+    
+    const mode = document.querySelector('input[name="searchMode"]:checked').value;
+    
+    if(mode === 'selected' && selectedDocIds.size === 0) {
+        showToast('⚠️ Selecciona al menos un documento', 'warning');
+        return;
+    }
+    
+    appendMessage('user', question);
+    messageInput.value = ''; 
+    sendBtn.disabled = true; 
+    loadingIndicator.classList.add('show');
+
+    try {
+        const docs = mode === 'all' ? allDocuments.map(d => d.id) : Array.from(selectedDocIds);
+
+        const res = await fetch(`${API_BASE}/api/ask`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            credentials: 'include',  // Importante para mantener la sesión
+            body: JSON.stringify({ question, docs })
+        });
+        
+        const data = await res.json();
+        
+        if(data.success) {
+            appendMessage('bot', data.answer, data.sources);
+        } else {
+            appendMessage('bot', '❌ Error en la respuesta', []);
+        }
+    } catch(e) { 
+        console.error(e); 
+        appendMessage('bot', '❌ Error de red', []); 
+    }
+
+    loadingIndicator.classList.remove('show'); 
+    sendBtn.disabled = false;
+}
+
+function appendMessage(sender, text, sources = []) {
+    const div = document.createElement('div'); 
+    div.className = 'message ' + sender;
+    
+    const content = document.createElement('div'); 
+    content.className = 'message-content'; 
+    content.innerHTML = text.replace(/\n/g, '<br>');
+    div.appendChild(content);
+    messagesContainer.appendChild(div);
+    messagesContainer.scrollTop = messagesContainer.scrollHeight;
+}
+
+async function checkHealth() {
+    try {
+        const res = await fetch(`${API_BASE}/api/health`);
+        if(!res.ok) throw new Error('Backend no responde');
+        
+        const data = await res.json();
+        
+        if(data.success) { 
+            statusBadge.textContent = `🟢 Conectado (${data.chat_model})`; 
+            statusBadge.className = 'status-badge connected'; 
+            
+            if(data.config && !data.config.hasApiKey) {
+                showToast('⚠️ Advertencia: No se detectó API key de OpenAI', 'warning');
+            }
+        } else { 
+            statusBadge.textContent = '🔴 Error'; 
+            statusBadge.className = 'status-badge error'; 
+        }
+    } catch(e) { 
+        console.error('Health check failed', e); 
+        statusBadge.textContent = '🔴 Sin conexión'; 
+        statusBadge.className = 'status-badge error'; 
+    }
+}
+
+// Inicializar
+loadDocuments(); 
+checkHealth(); 
+setInterval(checkHealth, 5000);
+</script>
+</body>
+</html>
